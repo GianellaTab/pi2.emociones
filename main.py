@@ -371,7 +371,7 @@ class DepressionDetector(QMainWindow):
         }
         
         self.ultima_captura_tristeza = datetime.min  # Inicializa con la fecha mínima posible
-        self.intervalo_captura = timedelta(seconds=2) # Intervalo de tiempo en segundos entre capturas
+        self.intervalo_captura = timedelta(seconds=120) # Intervalo de tiempo en segundos entre capturas
 
         self.fer_detector = FER()
         self.emotion_history = []
@@ -407,7 +407,7 @@ class DepressionDetector(QMainWindow):
                 if w < 50 or h < 50:
                     continue  # Ignora regiones demasiado pequeñas
                     
-                if porcentaje >= 0.60:
+                if porcentaje >= 0.70:
                     
                     if emotion in ['sad', 'fear', 'angry', 'disgust']:  # Si detecta emoción triste
                         # Enviar correo
@@ -478,7 +478,7 @@ class DepressionDetector(QMainWindow):
                 if w < 100 or h < 100:
                     continue 
                 
-                if porcentaje <= 0.60:
+                if porcentaje <= 0.70:
                     return
                 
                 print("Prueba de porcentaje", porcentaje2)
