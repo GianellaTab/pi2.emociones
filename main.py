@@ -445,7 +445,7 @@ class DepressionDetector(QMainWindow):
         }
         
         self.ultima_captura_tristeza = datetime.min  # Inicializa con la fecha mínima posible
-        self.intervalo_captura = timedelta(seconds=2) # Intervalo de tiempo en segundos entre capturas
+        self.intervalo_captura = timedelta(seconds=60) # Intervalo de tiempo en segundos entre capturas
 
         self.fer_detector = FER()
         self.emotion_history = []
@@ -454,7 +454,7 @@ class DepressionDetector(QMainWindow):
         self.max_history_size = 100
 
     def start_detection(self):
-        self.timer.start(100)
+        self.timer.start(50)
 
     def abrir_busqueda_por_fecha(self):
         threading.Thread(target=iniciar_gui_tkinter).start()
@@ -481,20 +481,24 @@ class DepressionDetector(QMainWindow):
                 emotion = max(emociones, key=emociones.get)
                 porcentaje = emociones[emotion]
                 
-                if w < 50 or h < 50:
+                if w < 100 or h < 100:
                     continue  # Ignora regiones demasiado pequeñas
                     
-                if porcentaje >= 0.60:
+                if porcentaje >= 0.70:
                     
-                    if emotion in ['sad', 'fear', 'angry', 'disgust']:  # Si detecta emoción triste
-                        # Enviar correo
-                        verificar_y_enviar_correo(emotion, porcentaje)
+                    # if emotion in ['sad', 'fear', 'angry', 'disgust']:  # Si detecta emoción triste
+                    #     # Enviar correo
+                    #     verificar_y_enviar_correo(emotion, porcentaje)
+                    
+                    if emotion in ['sad', 'fear', 'angry', 'disgust']:
+                        threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
                 
                     if emotion == 'sad' or emotion == 'fear' or emotion == 'angry' or emotion == 'disgust':
                         ahora = datetime.now()
                         if ahora - self.ultima_captura_tristeza > self.intervalo_captura:
                             imagen_path = guardar_imagen_tristeza(frame)
-                            guardar_resultado_con_imagen(emotion, porcentaje, imagen_path)
+                            # guardar_resultado_con_imagen(emotion, porcentaje, imagen_path)
+                            threading.Thread(target=guardar_resultado_con_imagen, args=(emotion, porcentaje, imagen_path)).start()
                             self.ultima_captura_tristeza = ahora
                     # else:
                     #     guardar_resultado_con_imagen(emotion, porcentaje, None)
@@ -511,7 +515,8 @@ class DepressionDetector(QMainWindow):
                         emotions_count[emocion_cast] += 1
                     
                     if emotion == 'sad' or emotion == 'fear' or emotion == 'angry' or emotion == 'disgust':
-                        guardar_resultado_sqlite(emocion_cast, porcentaje)
+                        # guardar_resultado_sqlite(emocion_cast, porcentaje)
+                        threading.Thread(target=guardar_resultado_sqlite, args=(emocion_cast, porcentaje)).start()
 
         elif selected_model == "DeepFace":
             # result = DeepFace.analyze(rgb_image, actions=['emotion'], enforce_detection=True)
@@ -577,26 +582,51 @@ class DepressionDetector(QMainWindow):
                 self.emotions_count[emotion] += count
 
         if emotions_count:
-            emotions_to_remove = ['Neutral', 'Feliz', 'Sorpresa']
-            filtered_emotions = {k: v for k, v in self.emotions_count.items() if k not in emotions_to_remove}
-            sorted_emotions = dict(sorted(filtered_emotions.items(), key=lambda item: item[1], reverse=True))
-            dominant_emotions_text = "\n".join([f"{emotion}: {count}" for emotion, count in sorted_emotions.items()])
-            self.dominant_emotion_label.setText(f"Emociones Dominantes:\n{dominant_emotions_text}")
+            if emotions_count:
+                # Ordenar emociones dominantes de mayor a menor
+                emotions_to_remove = ['Neutral', 'Feliz','Sorpresa']  
+                filtered_emotions = {k: v for k, v in self.emotions_count.items() if k not in emotions_to_remove}                
+                sorted_emotions = dict(sorted(filtered_emotions.items(), key=lambda item: item[1], reverse=True))
+                dominant_emotions_text = "\n".join([f"{emotion}: {count}" for emotion, count in sorted_emotions.items()])
+                self.dominant_emotion_label.setText(f"Emociones Dominantes:\n{dominant_emotions_text}")
 
-            emotion_values = {
-                'Tristeza': -1.0, 'Miedo': -1.0, 'Enojo': -1.0, 'Desprecio': -1.0,
-                'Feliz': 1.0, 'Sorpresa': 1.0, 'Neutral': 0.0
-            }
-            total_emotions_value = sum(emotion_values.get(e, 0) * c for e, c in emotions_count.items())
-            average_emotion = total_emotions_value / sum(emotions_count.values()) if sum(emotions_count.values()) else 0
-            self.average_emotion_label.setText(f"Promedio de Emociones: {average_emotion:.2f}")
+                # Promedio de emociones
+                total_emotions_value = 0.0
+                emotion_values = {
+                    'Tristeza': -1.0,
+                    'Miedo': -1.0,
+                    'Enojo': -1.0,
+                    'Desprecio': -1.0,
+                    'Feliz':1.0,
+                    'Sorpresa':1.0,
+                    'Neutral': 0.0
+                }
+                print("*******************")                  
+                for emotion, count in emotions_count.items():                                      
+                    total_emotions_value += emotion_values.get(emotion, 0) * count
+                    #print (emotion, count)
+                #print (total_emotions_value)
+                average_emotion = total_emotions_value / sum(emotions_count.values()) if sum(emotions_count.values()) > 0 else 0
+                #print(average_emotion," = ", total_emotions_value ,"/", sum(emotions_count.values()))
+                self.average_emotion_label.setText(f"Promedio de Emociones: {average_emotion:.2f}")
 
-            self.negative_emotion_history.append(average_emotion)
-            if len(self.negative_emotion_history) > self.max_history_size:
-                self.negative_emotion_history.pop(0)
-            smoothed_avg = sum(self.negative_emotion_history) / len(self.negative_emotion_history)
-            self.alert_label.setText("Alerta: Predominan emociones negativas." if smoothed_avg < 0 else "")
+                self.negative_emotion_history.append(average_emotion)                
+                # Si la lista supera el tamaño máximo, eliminamos el valor más antiguo
+                if len(self.negative_emotion_history) > self.max_history_size:
+                    self.negative_emotion_history.pop(0)                
+                # Calcular el promedio de los últimos valores
+                smoothed_negative_emotion = sum(self.negative_emotion_history) / len(self.negative_emotion_history)
+                
+                #print ("smoothed_negative_emotion: ",smoothed_negative_emotion)
+                # Alerta
+                if smoothed_negative_emotion < 0:
+                    self.alert_label.setText("Alerta: Predominan emociones negativas.")
+                else:
+                    self.alert_label.setText("")
 
+            # Actualizar el gráfico
+            emotions_to_remove = ['Neutral', 'Feliz','Sorpresa']  
+            filtered_emotions = {k: v for k, v in self.emotions_count.items() if k not in emotions_to_remove}                            
             self.emotion_history_plot.update_plot(filtered_emotions)
 
     def closeEvent(self, event):
