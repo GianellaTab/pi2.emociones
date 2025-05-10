@@ -78,6 +78,74 @@ def buscar_emociones_por_fecha(inicio, fin):
     conn.close()
     return resultados
 
+# Función para obtener la lista de emociones desde la base de datos
+def obtener_lista_emociones():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT emocion, porcentaje, fecha_hora FROM emociones")
+    resultados = c.fetchall()
+    conn.close()
+    return resultados
+
+# Función para generar un archivo Excel con la lista de emociones
+def generar_excel_emociones():
+    try:
+        # Obtener la lista de emociones
+        lista_emociones = obtener_lista_emociones()
+        if not lista_emociones:
+            messagebox.showwarning("Advertencia", "No hay emociones registradas en la base de datos.")
+            return None
+
+        # Crear un DataFrame de pandas
+        df = pd.DataFrame(lista_emociones, columns=["Emoción", "Porcentaje", "FechaHora"])
+
+        # Guardar el archivo Excel temporalmente
+        archivo_excel = "emociones.xlsx"
+        df.to_excel(archivo_excel, index=False)
+        return archivo_excel
+    except Exception as e:
+        messagebox.showerror("Error", f"Error al generar el archivo Excel: {str(e)}")
+        return None
+
+def enviar_excel_emociones_por_correo():
+    try:
+        # Generar el archivo Excel
+        archivo_excel = generar_excel_emociones()
+        if not archivo_excel:
+            return
+
+        # Configurar el correo
+        subject = "Lista de Emociones Registradas"
+        body = "Adjunto encontrarás un archivo Excel con la lista de emociones registradas."
+        to_email = "xrichardx15@gmail.com"  # Cambia esto al correo deseado
+
+        from_email = "richardalvarezruiz.1997@gmail.com"  # Tu correo de Gmail
+        password = "kobh lpxw mzcf vwqb"  # Tu contraseña de Gmail o contraseña de aplicación
+
+        # Crear el mensaje de correo
+        mensaje = MIMEMultipart()
+        mensaje["From"] = from_email
+        mensaje["To"] = to_email
+        mensaje["Subject"] = subject
+        mensaje.attach(MIMEText(body, "plain"))
+
+        # Adjuntar el archivo Excel
+        with open(archivo_excel, "rb") as adjunto:
+            part = MIMEText(adjunto.read(), "base64", "utf-8")
+            part.add_header("Content-Disposition", f"attachment; filename={archivo_excel}")
+            mensaje.attach(part)
+
+        # Enviar el correo
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(from_email, password)
+        server.sendmail(from_email, to_email, mensaje.as_string())
+        server.quit()
+
+        messagebox.showinfo("Éxito", "El archivo Excel se ha enviado por correo.")
+    except Exception as e:
+        messagebox.showerror("Error", f"Error al enviar el archivo Excel: {str(e)}")
+
 # Configuración para guardar las imágenes
 image_save_folder = "capturas_tristeza"  # Carpeta donde se guardarán las capturas
 if not os.path.exists(image_save_folder):
@@ -280,13 +348,13 @@ def enviar_correo(subject, body, to_email):
     
 def verificar_y_enviar_correo(emotion, porcentaje):
     if emotion in ['sad', 'fear', 'angry', 'disgust']:
-        subject = "⚠️ Alerta: Emoción Negativa Detectada"
-        body = f"Se ha detectado una emoción negativa: {emotion.capitalize()}.\n\nPorcentaje: {porcentaje * 100:.2f}%"
-        to_email = "gianella.taboada@gmail.com"  # Correo a donde se enviará la alerta
+        subject = "⚠️ Alerta: Emoción Triste Detectada"
+        body = f"Se ha detectado una emoción triste: {emotion.capitalize()}.\n\nPorcentaje: {porcentaje * 100:.2f}%"
+        to_email = "xrichardx15@gmail.com"  # Correo a donde se enviará la alerta
         enviar_correo(subject, body, to_email)
-        print(f"Correo enviado:")
+        print(f"Correo enviado: {subject}")
 
-# Mostrar gráfico de emociones
+# Clase para mostrar gráfico de emociones
 class EmotionHistoryPlot(QWidget):
     def __init__(self):
         super().__init__()
@@ -349,6 +417,12 @@ class DepressionDetector(QMainWindow):
 
         self.emotion_history_plot = EmotionHistoryPlot()
         stats_layout.addWidget(self.emotion_history_plot)
+        
+        # Botón para enviar el archivo Excel por correo
+        self.send_excel_button = QPushButton("Enviar Lista de Emociones en Excel", self)
+        self.send_excel_button.clicked.connect(self.enviar_excel_emociones)
+
+        left_layout.addWidget(self.send_excel_button)
 
         main_layout = QHBoxLayout()
         main_layout.addLayout(left_layout)
@@ -371,7 +445,7 @@ class DepressionDetector(QMainWindow):
         }
         
         self.ultima_captura_tristeza = datetime.min  # Inicializa con la fecha mínima posible
-        self.intervalo_captura = timedelta(seconds=120) # Intervalo de tiempo en segundos entre capturas
+        self.intervalo_captura = timedelta(seconds=2) # Intervalo de tiempo en segundos entre capturas
 
         self.fer_detector = FER()
         self.emotion_history = []
@@ -384,6 +458,9 @@ class DepressionDetector(QMainWindow):
 
     def abrir_busqueda_por_fecha(self):
         threading.Thread(target=iniciar_gui_tkinter).start()
+        
+    def enviar_excel_emociones(self):
+        threading.Thread(target=enviar_excel_emociones_por_correo).start()
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -407,7 +484,7 @@ class DepressionDetector(QMainWindow):
                 if w < 50 or h < 50:
                     continue  # Ignora regiones demasiado pequeñas
                     
-                if porcentaje >= 0.70:
+                if porcentaje >= 0.60:
                     
                     if emotion in ['sad', 'fear', 'angry', 'disgust']:  # Si detecta emoción triste
                         # Enviar correo
@@ -478,7 +555,7 @@ class DepressionDetector(QMainWindow):
                 if w < 100 or h < 100:
                     continue 
                 
-                if porcentaje <= 0.70:
+                if porcentaje <= 0.60:
                     return
                 
                 print("Prueba de porcentaje", porcentaje2)
@@ -532,5 +609,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = DepressionDetector()
     window.show()
-    print("Script terminado correctamente.")
     sys.exit(app.exec_())
