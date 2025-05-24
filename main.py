@@ -38,8 +38,87 @@ def init_db():
         fecha TEXT,
         imagen_path TEXT
     )''')
+    
+    # Nueva tabla de usuarios
+    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE,
+        contrasena TEXT
+    )''')
+    
+    # Crear usuario por defecto si no existe
+    c.execute("SELECT * FROM usuarios WHERE usuario = 'admin'")
+    if not c.fetchone():
+        c.execute("INSERT INTO usuarios (usuario, contrasena) VALUES (?, ?)", ("admin", "admin123"))
+        
     conn.commit()
     conn.close()
+    
+def mostrar_aplicacion():
+    # Aquí va la lógica principal de la aplicación una vez logueado
+    ventana = tk.Tk()
+    ventana.title("Aplicación Principal")
+    ventana.geometry("400x300")
+    tk.Label(ventana, text="¡Bienvenido!", font=("Helvetica", 16)).pack(pady=50)
+    ventana.mainloop()
+    
+def mostrar_login():
+    def verificar_credenciales(event=None):
+        usuario = entry_usuario.get()
+        contrasena = entry_contrasena.get()
+
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        c.execute("SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?", (usuario, contrasena))
+        resultado = c.fetchone()
+        conn.close()
+
+        if resultado:
+            login_window.destroy()
+            mostrar_aplicacion()
+        else:
+            messagebox.showerror("Error", "Credenciales incorrectas")
+
+    login_window = tk.Tk()
+    login_window.title("Inicio de Sesión")
+    login_window.resizable(False, False)
+    login_window.configure(bg="#f0f4f7")
+
+    # Tamaño de la ventana
+    ancho_ventana = 350
+    alto_ventana = 450
+
+    # Obtener dimensiones de la pantalla
+    ancho_pantalla = login_window.winfo_screenwidth()
+    alto_pantalla = login_window.winfo_screenheight()
+
+    # Calcular posición x, y
+    x = (ancho_pantalla // 2) - (ancho_ventana // 2)
+    y = (alto_pantalla // 2) - (alto_ventana // 2)
+
+    # Posicionar la ventana en el centro
+    login_window.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
+
+    # Contenedor visual
+    frame = tk.Frame(login_window, bg="white", padx=80, pady=80, relief="ridge", bd=2)
+    frame.place(relx=0.5, rely=0.5, anchor="center")
+
+    tk.Label(frame, text="Inicia Sesión", font=("Helvetica", 16), bg="white").pack(pady=(0, 10))
+
+    tk.Label(frame, text="Usuario:", bg="white", anchor="w").pack(fill='x')
+    entry_usuario = tk.Entry(frame)
+    entry_usuario.pack(fill='x', pady=(0, 10))
+    entry_usuario.focus()  # Foco automático
+
+    tk.Label(frame, text="Contraseña:", bg="white", anchor="w").pack(fill='x')
+    entry_contrasena = tk.Entry(frame, show="*")
+    entry_contrasena.pack(fill='x', pady=(0, 10))
+
+    tk.Button(frame, text="Ingresar", bg="#4CAF50", fg="white", command=verificar_credenciales).pack(pady=(10, 0), fill='x')
+
+    login_window.bind("<Return>", verificar_credenciales)
+
+    login_window.mainloop()
 
 # Guardar resultados en SQLite
 def guardar_resultado_sqlite(emocion, porcentaje):
@@ -348,15 +427,15 @@ def enviar_correo(subject, body, to_email):
     
 def verificar_y_enviar_correo(emotion, porcentaje):
     if emotion in ['sad', 'fear', 'angry', 'disgust']:
-        subject = "⚠️ Alerta: Emoción Triste Detectada"
-        body = f"Se ha detectado una emoción triste: {emotion.capitalize()}.\n\nPorcentaje: {porcentaje * 100:.2f}%"
+        subject = "⚠️ Alerta: Emoción Negativa Detectada"
+        body = f"Se ha detectado la emoción de: {emotion.capitalize()}.\n\nPorcentaje: {porcentaje * 100:.2f}%"
         to_email = "xrichardx15@gmail.com"  # Correo a donde se enviará la alerta
         enviar_correo(subject, body, to_email)
         print(f"Correo enviado: {subject}")
 
 # Clase para mostrar gráfico de emociones
 class EmotionHistoryPlot(QWidget):
-    def __init__(self):
+    def __init__(self): 
         super().__init__()
         self.figure, self.ax = plt.subplots()
         self.canvas = FigureCanvas(self.figure)
@@ -432,7 +511,8 @@ class DepressionDetector(QMainWindow):
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-        self.cap = cv2.VideoCapture(0)
+        # self.cap = cv2.VideoCapture(0) # Cambia el índice a 0 para hacerlo con una camara
+        self.cap = cv2.VideoCapture("video2.mp4") # Cambia el índice por el nombre del video "video2.mp4" para reconocer un video
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
 
@@ -452,9 +532,10 @@ class DepressionDetector(QMainWindow):
         self.emotions_count = {emotion: 0 for emotion in self.all_list_emotions.values()}
         self.negative_emotion_history = []
         self.max_history_size = 100
+        self.emocion_anterior = None
 
     def start_detection(self):
-        self.timer.start(50)
+        self.timer.start(20)
 
     def abrir_busqueda_por_fecha(self):
         threading.Thread(target=iniciar_gui_tkinter).start()
@@ -473,50 +554,53 @@ class DepressionDetector(QMainWindow):
 
         if selected_model == "FER":
             faces = self.fer_detector.detect_emotions(rgb_image)
-            if len(faces) == 0:
-                return 
+            if not faces:
+                return
+
             for face in faces:
                 (x, y, w, h) = face["box"]
                 emociones = face["emotions"]
                 emotion = max(emociones, key=emociones.get)
                 porcentaje = emociones[emotion]
-                
-                if w < 100 or h < 100:
-                    continue  # Ignora regiones demasiado pequeñas
-                    
-                if porcentaje >= 0.70:
-                    
-                    # if emotion in ['sad', 'fear', 'angry', 'disgust']:  # Si detecta emoción triste
-                    #     # Enviar correo
-                    #     verificar_y_enviar_correo(emotion, porcentaje)
-                    
-                    if emotion in ['sad', 'fear', 'angry', 'disgust']:
-                        threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
-                
-                    if emotion == 'sad' or emotion == 'fear' or emotion == 'angry' or emotion == 'disgust':
-                        ahora = datetime.now()
+
+                if w < 100 or h < 100 or porcentaje < 0.60:
+                    continue  # Ignorar regiones pequeñas o emociones con baja confianza
+
+                es_depresiva = emotion in ['sad', 'fear', 'angry', 'disgust']
+
+                if es_depresiva:
+                    ahora = datetime.now()
+                    emocion_cambio = emotion != getattr(self, 'emocion_anterior', None)
+
+                    # Solo si la emoción ha cambiado se actualiza la anterior
+                    if emocion_cambio:
+                        self.emocion_anterior = emotion
+
                         if ahora - self.ultima_captura_tristeza > self.intervalo_captura:
-                            imagen_path = guardar_imagen_tristeza(frame)
-                            # guardar_resultado_con_imagen(emotion, porcentaje, imagen_path)
+                            # imagen_path = guardar_imagen_tristeza(frame)
+                            imagen_path = threading.Thread(target=guardar_imagen_tristeza, args=(frame)).start()
                             threading.Thread(target=guardar_resultado_con_imagen, args=(emotion, porcentaje, imagen_path)).start()
                             self.ultima_captura_tristeza = ahora
-                    # else:
-                    #     guardar_resultado_con_imagen(emotion, porcentaje, None)
-                    
-                    if emotion in self.depressive_emotions:
-                        color = (255, 0, 0)
-                        emocion_cast = self.depressive_emotions[emotion]
-                    else:
-                        color = (0, 255, 0)
-                        emocion_cast = emotion
-                    cv2.rectangle(rgb_image, (x, y), (x + w, y + h), color, 2)
-                    cv2.putText(rgb_image, f"{emocion_cast}: {porcentaje*100:.2f}%", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-                    if emocion_cast in emotions_count:
-                        emotions_count[emocion_cast] += 1
-                    
-                    if emotion == 'sad' or emotion == 'fear' or emotion == 'angry' or emotion == 'disgust':
-                        # guardar_resultado_sqlite(emocion_cast, porcentaje)
-                        threading.Thread(target=guardar_resultado_sqlite, args=(emocion_cast, porcentaje)).start()
+
+                        threading.Thread(target=guardar_resultado_sqlite, args=(emotion, porcentaje)).start()
+                        threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
+                        
+                        # Aumenta el contador solo si la emoción ha cambiado
+                        if emotion in self.depressive_emotions:
+                            emocion_cast = self.depressive_emotions[emotion]
+                            emotions_count[emocion_cast] += 1
+                else:
+                    # Si no es una emoción depresiva, se limpia la emoción anterior
+                    self.emocion_anterior = None
+
+                color = (255, 0, 0) if emotion in self.depressive_emotions else (0, 255, 0)
+                emocion_cast = self.depressive_emotions.get(emotion, emotion)
+
+                cv2.rectangle(rgb_image, (x, y), (x + w, y + h), color, 2)
+                cv2.putText(rgb_image, f"{emocion_cast}: {porcentaje*100:.2f}%", (x, y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+
+
 
         elif selected_model == "DeepFace":
             # result = DeepFace.analyze(rgb_image, actions=['emotion'], enforce_detection=True)
@@ -570,7 +654,11 @@ class DepressionDetector(QMainWindow):
                 cv2.putText(rgb_image, f"{emocion_cast}: {porcentaje*100:.2f}%", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
                 emotions_count[emocion_cast] += 1
-                guardar_resultado_sqlite(emocion_cast, porcentaje)
+                # guardar_resultado_sqlite(emocion_cast, porcentaje)
+                threading.Thread(target=guardar_resultado_sqlite, args=(emocion_cast, porcentaje)).start()
+                
+                if emotion in ['sad', 'fear', 'angry', 'disgust']:
+                        threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
 
         # Mostrar en GUI
         height, width, channel = rgb_image.shape
@@ -601,7 +689,7 @@ class DepressionDetector(QMainWindow):
                     'Sorpresa':1.0,
                     'Neutral': 0.0
                 }
-                print("*******************")                  
+                # print("*******************")                  
                 for emotion, count in emotions_count.items():                                      
                     total_emotions_value += emotion_values.get(emotion, 0) * count
                     #print (emotion, count)
@@ -634,9 +722,14 @@ class DepressionDetector(QMainWindow):
         self.timer.stop()
         event.accept()
 
-if __name__ == "__main__":
-    init_db()
+def mostrar_aplicacion():
+    # init_db()
     app = QApplication(sys.argv)
     window = DepressionDetector()
     window.show()
     sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    init_db()
+    mostrar_login()
