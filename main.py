@@ -1,9 +1,8 @@
 import sys
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QComboBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QMessageBox
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap
 from fer import FER
@@ -130,6 +129,25 @@ def guardar_resultado_sqlite(emocion, porcentaje):
               (emocion, round(porcentaje * 100, 2), fecha_hora, fecha))
     conn.commit()
     conn.close()
+    
+# def guardar_resultado_sqlitetest():
+#     fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#     fecha = datetime.now().strftime("2025-05-04")
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+#     emociones = ["triste", "miedo", "enojo"]
+
+#     for i in range(30):
+#         emocion = random.choice(emociones)
+#         confianza = random.uniform(50, 100)  # Rango de confianza entre 50% y 100%
+
+#         if confianza > 70:
+#             print(f"FER (alta confianza): {emocion} ({confianza:.2f}%)")
+#             c.execute("INSERT INTO emociones (emocion, porcentaje, fecha_hora, fecha) VALUES (?, ?, ?, ?)",
+#                     (emocion, round(confianza, 2), fecha_hora, fecha))
+#     conn.commit()
+#     conn.close()
+
 
 def guardar_resultado_con_imagen(emocion, porcentaje, imagen_path=None):
     fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -196,7 +214,7 @@ def enviar_excel_emociones_por_correo():
         # Configurar el correo
         subject = "Lista de Emociones Registradas"
         body = "Adjunto encontrarás un archivo Excel con la lista de emociones registradas."
-        to_email = "xrichardx15@gmail.com"  # Cambia esto al correo deseado
+        to_email = "gianella.taboada@gmail.com"  # Cambia esto al correo deseado
 
         from_email = "richardalvarezruiz.1997@gmail.com"  # Tu correo de Gmail
         password = "kobh lpxw mzcf vwqb"  # Tu contraseña de Gmail o contraseña de aplicación
@@ -429,7 +447,7 @@ def verificar_y_enviar_correo(emotion, porcentaje):
     if emotion in ['sad', 'fear', 'angry', 'disgust']:
         subject = "⚠️ Alerta: Emoción Negativa Detectada"
         body = f"Se ha detectado la emoción de: {emotion.capitalize()}.\n\nPorcentaje: {porcentaje * 100:.2f}%"
-        to_email = "xrichardx15@gmail.com"  # Correo a donde se enviará la alerta
+        to_email = "gianella.taboada@gmail.com"  # Correo a donde se enviará la alerta
         enviar_correo(subject, body, to_email)
         print(f"Correo enviado: {subject}")
 
@@ -469,21 +487,52 @@ class DepressionDetector(QMainWindow):
 
         self.start_button = QPushButton("Iniciar Detección", self)
         self.start_button.clicked.connect(self.start_detection)
-
+       
         self.search_button = QPushButton("Buscar por Fecha", self)
         self.search_button.clicked.connect(self.abrir_busqueda_por_fecha)
+        
+        # Botón para enviar el archivo Excel por correo
+        self.send_excel_button = QPushButton("Enviar Lista de Emociones en Excel", self)
+        self.send_excel_button.clicked.connect(self.enviar_excel_emociones)
 
         self.model_selector = QComboBox(self)
         self.model_selector.addItem("FER")
         self.model_selector.addItem("DeepFace")
-
+        
+        #Botón de información
+        self.info_button = QPushButton("?")
+        self.info_button.setFixedSize(25, 25)
+        self.info_button.setToolTip("Información sobre los modelos")
+        self.info_button.clicked.connect(self.mostrar_info_modelos)
+        
+        # # Estilo circular del botón
+        self.info_button.setStyleSheet("""
+            QPushButton {
+                border-radius: 12px;
+                font-weight: bold;
+                background-color: #3498db;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        
+        model_row_layout = QHBoxLayout()
+        model_row_layout.addWidget(self.model_selector, 9)
+        model_row_layout.addWidget(self.info_button, 1) 
+        
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("Selecciona el modelo:"))
-        left_layout.addWidget(self.model_selector)
+        left_layout.addLayout(model_row_layout)
         left_layout.addWidget(self.video_label)
+        
+        left_layout.addStretch()
+        
         left_layout.addWidget(self.start_button)
         left_layout.addWidget(self.search_button)
-
+        left_layout.addWidget(self.send_excel_button)
+        
         stats_layout = QVBoxLayout()
         self.dominant_emotion_label = QLabel("Emociones Dominantes: ", self)
         stats_layout.addWidget(self.dominant_emotion_label)
@@ -496,23 +545,18 @@ class DepressionDetector(QMainWindow):
 
         self.emotion_history_plot = EmotionHistoryPlot()
         stats_layout.addWidget(self.emotion_history_plot)
-        
-        # Botón para enviar el archivo Excel por correo
-        self.send_excel_button = QPushButton("Enviar Lista de Emociones en Excel", self)
-        self.send_excel_button.clicked.connect(self.enviar_excel_emociones)
-
-        left_layout.addWidget(self.send_excel_button)
 
         main_layout = QHBoxLayout()
         main_layout.addLayout(left_layout)
         main_layout.addLayout(stats_layout)
+        
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-        # self.cap = cv2.VideoCapture(0) # Cambia el índice a 0 para hacerlo con una camara
-        self.cap = cv2.VideoCapture("video2.mp4") # Cambia el índice por el nombre del video "video2.mp4" para reconocer un video
+        self.cap = cv2.VideoCapture(0) # Cambia el índice a 0 para hacerlo con una camara
+        # self.cap = cv2.VideoCapture("video2.mp4") # Cambia el índice por el nombre del video "video2.mp4" para reconocer un video
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
 
@@ -542,6 +586,18 @@ class DepressionDetector(QMainWindow):
         
     def enviar_excel_emociones(self):
         threading.Thread(target=enviar_excel_emociones_por_correo).start()
+        
+    def mostrar_info_modelos(self):
+        info_text = (
+            "Modelos disponibles:\n\n"
+            "• FER (Facial Expression Recognition):\n"
+            "  FER se recomienda para situaciones que requieren un análisis rápido y eficiente de emociones básicas, especialmente cuando se necesita una respuesta inmediata.\n\n"
+            "• DeepFace:\n"
+            "  DeepFace es más adecuado para contextos en los que se requiere una evaluación más precisa y profunda de las emociones faciales, debido a su mayor capacidad de análisis."
+        )
+
+        QMessageBox.information(self, "Información sobre los Modelos", info_text)
+
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -563,7 +619,7 @@ class DepressionDetector(QMainWindow):
                 emotion = max(emociones, key=emociones.get)
                 porcentaje = emociones[emotion]
 
-                if w < 100 or h < 100 or porcentaje < 0.60:
+                if w < 100 or h < 100 or porcentaje < 0.70:
                     continue  # Ignorar regiones pequeñas o emociones con baja confianza
 
                 es_depresiva = emotion in ['sad', 'fear', 'angry', 'disgust']
@@ -576,11 +632,10 @@ class DepressionDetector(QMainWindow):
                     if emocion_cambio:
                         self.emocion_anterior = emotion
 
-                        if ahora - self.ultima_captura_tristeza > self.intervalo_captura:
-                            # imagen_path = guardar_imagen_tristeza(frame)
-                            imagen_path = threading.Thread(target=guardar_imagen_tristeza, args=(frame)).start()
-                            threading.Thread(target=guardar_resultado_con_imagen, args=(emotion, porcentaje, imagen_path)).start()
-                            self.ultima_captura_tristeza = ahora
+                        # if ahora - self.ultima_captura_tristeza > self.intervalo_captura:
+                        #     imagen_path = threading.Thread(target=guardar_imagen_tristeza, args=(frame,)).start()
+                        #     threading.Thread(target=guardar_resultado_con_imagen, args=(emotion, porcentaje, imagen_path)).start()
+                        #     self.ultima_captura_tristeza = ahora
 
                         threading.Thread(target=guardar_resultado_sqlite, args=(emotion, porcentaje)).start()
                         threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
@@ -589,6 +644,7 @@ class DepressionDetector(QMainWindow):
                         if emotion in self.depressive_emotions:
                             emocion_cast = self.depressive_emotions[emotion]
                             emotions_count[emocion_cast] += 1
+                            print(f"Emoción depresiva detectada: {emotion} con porcentaje {porcentaje*100:.2f}%")
                 else:
                     # Si no es una emoción depresiva, se limpia la emoción anterior
                     self.emocion_anterior = None
@@ -603,29 +659,9 @@ class DepressionDetector(QMainWindow):
 
 
         elif selected_model == "DeepFace":
-            # result = DeepFace.analyze(rgb_image, actions=['emotion'], enforce_detection=True)
-            # faces = result if isinstance(result, list) else [result]
-            # for face_info in faces:
-            #     emotion = face_info['dominant_emotion']
-            #     porcentaje = face_info['emotion'][emotion] / 100
-            #     region = face_info.get('region', {'x': 0, 'y': 0, 'w': 0, 'h': 0})
-            #     x, y, w, h = region['x'], region['y'], region['w'], region['h']
-            #     emocion_cast = self.all_list_emotions.get(emotion, emotion)
-
-            #     # if w < 50 or h < 50:
-            #     #     continue 
-                
-            #     color = (255, 0, 0) if emotion in self.depressive_emotions else (0, 255, 0)
-            #     cv2.rectangle(rgb_image, (x, y), (x + w, y + h), color, 2)
-            #     cv2.putText(rgb_image, emocion_cast, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-
-            #     emotions_count[emocion_cast] += 1
-            #     guardar_resultado_sqlite(emocion_cast, porcentaje)
             try:
                 result = DeepFace.analyze(rgb_image, actions=['emotion'], enforce_detection=True)
             except ValueError as e:
-                # print("No se detectó una cara en este frame. Frame descartado.")
-                # return  # Salta este frame
                 print("No se detectó una cara en este frame. Mostrando sin análisis.")
                 height, width, channel = rgb_image.shape
                 qimg = QImage(rgb_image.data, width, height, 3 * width, QImage.Format_RGB888)
@@ -644,7 +680,7 @@ class DepressionDetector(QMainWindow):
                 if w < 100 or h < 100:
                     continue 
                 
-                if porcentaje <= 0.60:
+                if porcentaje <= 0.70:
                     return
                 
                 print("Prueba de porcentaje", porcentaje2)
@@ -657,8 +693,8 @@ class DepressionDetector(QMainWindow):
                 # guardar_resultado_sqlite(emocion_cast, porcentaje)
                 threading.Thread(target=guardar_resultado_sqlite, args=(emocion_cast, porcentaje)).start()
                 
-                if emotion in ['sad', 'fear', 'angry', 'disgust']:
-                        threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
+                # if emotion in ['sad', 'fear', 'angry', 'disgust']:
+                #         threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
 
         # Mostrar en GUI
         height, width, channel = rgb_image.shape
@@ -732,4 +768,6 @@ def mostrar_aplicacion():
 
 if __name__ == "__main__":
     init_db()
-    mostrar_login()
+    # guardar_resultado_sqlitetest()
+    #mostrar_login()
+    mostrar_aplicacion()
