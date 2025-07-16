@@ -100,6 +100,13 @@ def init_db():
     if "nombre" not in cols:
         c.execute("ALTER TABLE emociones ADD COLUMN nombre TEXT")
 
+    # Añadir columna nombre si no existe
+    c.execute("PRAGMA table_info(emociones)")
+    cols = [r[1] for r in c.fetchall()]
+    if "modelo" not in cols:
+        c.execute("ALTER TABLE emociones ADD COLUMN modelo TEXT")
+
+
     conn.commit()
     conn.close()
     
@@ -168,47 +175,17 @@ def mostrar_login():
     login_window.bind("<Return>", verificar_credenciales)
 
     login_window.mainloop()
-
-# Guardar resultados en SQLite
-def guardar_resultado_sqlite(emocion, porcentaje):
-    fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    fecha = datetime.now().strftime("%Y-%m-%d")
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("INSERT INTO emociones (emocion, porcentaje, fecha_hora, fecha) VALUES (?, ?, ?, ?)",
-              (emocion, round(porcentaje * 100, 2), fecha_hora, fecha))
-    conn.commit()
-    conn.close()
     
-# def guardar_resultado_sqlitetest():
-#     fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#     fecha = datetime.now().strftime("2025-05-04")
-#     conn = sqlite3.connect(DB_NAME)
-#     c = conn.cursor()
-#     emociones = ["triste", "miedo", "enojo"]
-
-#     for i in range(30):
-#         emocion = random.choice(emociones)
-#         confianza = random.uniform(50, 100)  # Rango de confianza entre 50% y 100%
-
-#         if confianza > 70:
-#             print(f"FER (alta confianza): {emocion} ({confianza:.2f}%)")
-#             c.execute("INSERT INTO emociones (emocion, porcentaje, fecha_hora, fecha) VALUES (?, ?, ?, ?)",
-#                     (emocion, round(confianza, 2), fecha_hora, fecha))
-#     conn.commit()
-#     conn.close()
-
-
-def guardar_resultado_con_imagen(emocion, porcentaje, imagen_path=None,nombre=None):
+def guardar_resultado_con_imagen(emocion, porcentaje, imagen_path=None,nombre=None, modelo=None):
     fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fecha = datetime.now().strftime("%Y-%m-%d")
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
         INSERT INTO emociones 
-          (emocion, porcentaje, fecha_hora, fecha, imagen_path, nombre)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (emocion, round(porcentaje * 100, 2), fecha_hora, fecha, imagen_path, nombre))
+          (emocion, porcentaje, fecha_hora, fecha, imagen_path, nombre, modelo)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (emocion, round(porcentaje * 100, 2), fecha_hora, fecha, imagen_path, nombre, modelo))
     conn.commit()
     conn.close()
 
@@ -221,7 +198,7 @@ def buscar_emociones_por_fecha(inicio, fin):
     inicio_str = inicio.strftime('%Y-%m-%d')
     fin_str = fin.strftime('%Y-%m-%d')
     
-    c.execute("SELECT emocion, porcentaje, fecha_hora FROM emociones WHERE imagen_path is NULL and fecha BETWEEN ? AND ?", (inicio_str, fin_str))
+    c.execute("SELECT modelo, emocion, nombre, porcentaje, fecha_hora FROM emociones WHERE fecha BETWEEN ? AND ?", (inicio_str, fin_str))
     resultados = c.fetchall()
     conn.close()
     return resultados
@@ -479,8 +456,8 @@ def iniciar_gui_tkinter():
             else:
                 # Mostrar los resultados
                 for row in resultados:
-                    emocion, porcentaje, fecha_hora = row
-                    resultado_text.insert(tk.END, f"Emoción: {emocion}, Porcentaje: {porcentaje}%, Fecha: {fecha_hora}\n")
+                    modelo, emocion, nombre, porcentaje, fecha_hora = row
+                    resultado_text.insert(tk.END, f"Modelo: {modelo}, Emoción: {emocion}, Nombre: {nombre}, Porcentaje: {porcentaje}%, Fecha: {fecha_hora}\n")
         except Exception as e:
             messagebox.showerror("Error", f"Error al procesar las fechas.\n{str(e)}")
 
@@ -606,9 +583,6 @@ class DepressionDetector(QMainWindow):
         self.search_button = QPushButton("Buscar por Fecha", self)
         self.search_button.clicked.connect(self.abrir_busqueda_por_fecha)
         
-        # Botón para enviar el archivo Excel por correo
-        self.send_excel_button = QPushButton("Enviar Lista de Emociones en Excel", self)
-        self.send_excel_button.clicked.connect(self.enviar_excel_emociones)
 
         self.model_selector = QComboBox(self)
         self.model_selector.addItem("FER")
@@ -646,7 +620,6 @@ class DepressionDetector(QMainWindow):
         
         left_layout.addWidget(self.start_button)
         left_layout.addWidget(self.search_button)
-        left_layout.addWidget(self.send_excel_button)
         
         stats_layout = QVBoxLayout()
         self.dominant_emotion_label = QLabel("Emociones Dominantes: ", self)
@@ -717,7 +690,7 @@ class DepressionDetector(QMainWindow):
         # main.py (añadir dentro de __init__ de DepressionDetector) :contentReference[oaicite:0]{index=0}
         self.daily_report_button = QPushButton("Enviar reporte diario", self)
         self.daily_report_button.clicked.connect(self.send_daily_report)
-        left_layout.insertWidget(left_layout.indexOf(self.send_excel_button)+1, self.daily_report_button)
+        left_layout.insertWidget(left_layout.indexOf(self.search_button)+1, self.daily_report_button)
 
         self.register_face_button = QPushButton("Registrar Rostro", self)
         self.register_face_button.clicked.connect(self.open_face_registration)
@@ -1019,8 +992,6 @@ class DepressionDetector(QMainWindow):
                         self.emocion_anterior = emotion
 
                         label = self.all_list_emotions.get(emotion, emotion)
-                        #threading.Thread(target=guardar_resultado_sqlite, args=(label, porcentaje)).start()
-                        #threading.Thread(target=verificar_y_enviar_correo, args=(emotion, porcentaje)).start()
                    
                         # Aumenta el contador solo si la emoción ha cambiado
                         if emotion in self.depressive_emotions:
@@ -1032,7 +1003,7 @@ class DepressionDetector(QMainWindow):
                             # 2) Lanzar hilo solo para la inserción en BD                            
                             threading.Thread(
                                 target=guardar_resultado_con_imagen,
-                                args=(label, porcentaje, ruta, label_persona),
+                                args=(label, porcentaje, ruta, label_persona,"FER"),
                                 daemon=True
                             ).start()
 
@@ -1189,12 +1160,6 @@ class DepressionDetector(QMainWindow):
                 if label != self.deepface_emocion_anterior:
                     self.deepface_emocion_anterior = label
 
-                    # Guardar en BD en segundo plano
-                    #threading.Thread(
-                    #    target=guardar_resultado_sqlite,
-                    #    args=(label, conf)
-                    #).start()
-
                     # Si es emoc. depresiva, aumentamos contador
                     if dom in self.depressive_emotions:
                         label_persona = recognize_face(face_bgr)
@@ -1205,7 +1170,7 @@ class DepressionDetector(QMainWindow):
                         # 2) Lanzar hilos para insertar en BD con la ruta
                         threading.Thread(
                             target=guardar_resultado_con_imagen,
-                            args=(label, conf, ruta_imagen, label_persona),
+                            args=(label, conf, ruta_imagen, label_persona,"DeepFace"),
                             daemon=True
                         ).start()
                         # obtenemos la etiqueta en español
@@ -1427,8 +1392,7 @@ def load_known_faces():
     print(f"[load_known_faces] Total personas cargadas: {len(known_embeddings)}")
 
 if __name__ == "__main__":
-    init_db()    
-    # guardar_resultado_sqlitetest()
+    init_db()
     #mostrar_login()
     load_known_faces()
     mostrar_aplicacion()   
