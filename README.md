@@ -29,7 +29,7 @@ PI2 Emociones es una aplicación de escritorio para la detección y registro de 
 
 1. Clona este repositorio:
    ```bash
-   git clone <https://github.com/GianellaTab/pi2.emociones.git 
+   git clone https://github.com/GianellaTab/pi2.emociones.git 
    cd pi2.emociones
    ```
 2. Crea y activa un entorno virtual:
