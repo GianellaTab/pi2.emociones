@@ -175,3 +175,7 @@ cython_debug/
 
 capturas_tristeza/
 log.txt
+debug_faces/
+emociones_negativas/
+rostros_registrados/
+BK/
