@@ -89,15 +89,4 @@ pi2.emociones/
 └── .venv/                  # Entorno virtual (no versionar)
 ```
 
-## Contribuciones
-
-Las contribuciones son bienvenidas:
-
-1. Crea un *issue* describiendo tu propuesta.
-2. Haz un *fork* y desarrolla tu cambio.
-3. Abre un *pull request* con la descripción de tu aporte.
-
-## Licencia
-
-Este proyecto está bajo la licencia **MIT**. Consulta el archivo `LICENSE` para más detalles.
 
