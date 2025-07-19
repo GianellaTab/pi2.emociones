@@ -1393,6 +1393,6 @@ def load_known_faces():
 
 if __name__ == "__main__":
     init_db()
-    #mostrar_login()
+    mostrar_login()
     load_known_faces()
     mostrar_aplicacion()   
